@@ -1,5 +1,8 @@
--- Made by PMY 2014-06-23
--- Korean in the query will be changed to English later.
+-- ###########################################################
+-- ETL process for AUSOM into OMOP CDM v4.0 in MSSQL
+-- by Man Young Park, PhD, Ajou University School of Medicine
+-- The Korean will be rewritten in English later.
+-- ###########################################################
 
 [2013_EMR_datamart]
 use SCAN
