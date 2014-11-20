@@ -1,0 +1,626 @@
+--Made by PMY 2014-06-23
+-- Written in Korean will be changed to English later.
+
+[2013_EMR_datamart]
+use SCAN
+--PERSON table--
+DROP table PERSON
+SELECT * INTO PERSON
+FROM(
+     SELECT PATNO AS PERSON_ID, 
+            GENDER_CONCEPT_ID = CASE
+                                WHEN SEX = 'M' THEN 8507
+                                WHEN SEX = 'F' THEN 8532
+                                END, 
+            DATEPART(YY, birthday)AS YEAR_OF_BIRTH, 
+            DATEPART(MM, birthday)AS MONTH_OF_BIRTH, 
+            DATEPART(DD, birthday)AS DAY_OF_BIRTH, 
+            RACE_CONCEPT_ID = '38003585', 
+            ETHNICITY_CONCEPT_ID = NULL, 
+            LOCATION_ID = NULL, 
+            PROVIDER_ID = NULL, 
+            CARE_SITE_ID = 1, 
+            PERSON_SOURCE_VALUE = NULL, 
+            SEX AS GENDER_SOURCE_VALUE, 
+            RACE_SOURCE_VALUE = 'Y', 
+            ETHNICITY_SOURCE_VALUE = NULL
+     FROM [2013_EMR_datamart].dbo.ACPATBAT
+     WHERE DATEPART(YY, birthday)BETWEEN 1914 AND 2013)V;
+					     --(2408727개 행이 영향을 받음)
+
+--SCAN에서는 환자아이디가 숫자여야함. 그래서, A를 10으로 치환
+--A로 시작하는 환자는 건강검진 환자이다. 그런데, visit_occurrence 에는 입원,외래,응급만 들어가기때문에 데이터는 없다.
+--건강검진도 넣기 위해서는 건강검진의 환자 입원날짜가 있는 테이블을 가지고와서 추가하여야 한다.
+ALTER TABLE PERSON ALTER COLUMN PERSON_ID varchar( 15 );
+
+/*
+UPDATE PERSON SET PERSON_ID = REPLACE(PERSON_ID, 'A', '10')
+WHERE PERSON_ID LIKE 'A%';
+*/
+
+DELETE FROM PERSON WHERE PERSON_ID LIKE 'A%';  --건진환자 제거
+
+CREATE INDEX PERSON_idx ON person( person_id );
+--person_id 에 아래와 같은 데이터 있음 삭제.
+DELETE FROM PERSON
+  WHERE person_id = '10101010101010';
+DELETE FROM PERSON
+  WHERE ISNUMERIC( person_id ) = 0;
+
+DELETE FROM person
+  WHERE PERSON_ID = 'T123456';
+
+--VISIT_OCCURRENCE
+--E,I,O 만을 넣음.
+--VISIT_OCCURRENCE에 입원퇴원 날짜안에 외래 데이터가 들어가있는것들도 있음. 
+--쿼리 날릴때, 조심해야함.. 중복 데이터 발생할수 있음.
+45327	0003098	2006-10-13 00:00:00.000	2006-10-13 00:00:00.000	9202	NULL	O
+172092	0003098	2006-10-10 15:43:00.000	2006-10-14 10:12:00.000	9201	NULL	I
+
+select convert(varchar, '2012-12-03 18:00',23)
+select convert(datetime,convert(varchar, getdate(),23))
+
+select convert(datetime,convert(varchar , CONVERT(datetime, ADMTIME), 23)) AS VISIT_START_DATE,admtime     
+FROM [2013_EMR_datamart].dbo.APIPDLST
+
+
+use [2013_EMR_datamart]
+sp_help APIPDLST
+
+--convert(datetime,convert(varchar , CONVERT(datetime, ADMTIME), 23)) AS VISIT_START_DATE, 
+
+drop TABLE VISIT_OCCURRENCE 
+SELECT IDENTITY(int, 1, 1)AS VISIT_OCCURRENCE_ID, * INTO VISIT_OCCURRENCE
+FROM(
+     SELECT DISTINCT CONVERT(varchar(15), PATNO)AS PERSON_ID, 
+                     CONVERT(datetime, ADMTIME) AS VISIT_START_DATE, 
+                     CONVERT(datetime, DSCHTIME)AS VISIT_END_DATE, 
+                     PLACE_OF_SERVICE_CONCEPT_ID = CASE
+                                                   WHEN PATFG = 'I' THEN 9201
+                                                   WHEN PATFG = 'O' THEN 9202
+                                                   WHEN PATFG = 'E' THEN 9203
+                                                   END, 
+                     CARE_SITE_ID = NULL, 
+                     PATFG AS PLACE_OF_SERVICE_SOURCE_VALUE
+     FROM [2013_EMR_datamart].dbo.APIPDLST
+     WHERE PATFG IN('E', 'I', 'O')
+       AND DATEDIFF(MI, ADMTIME, DSCHTIME) >= 0
+       AND ISDATE(ADMTIME) = 1
+       AND ISDATE(DSCHTIME) = 1
+     UNION
+     SELECT DISTINCT PATNO AS PERSON_ID, 
+	                CONVERT(datetime, MEDTIME) AS VISIT_START_DATE, 
+                     
+                     DATEADD(MINUTE,-1,CONVERT(VARCHAR,DATEADD(DAY,1,MEDDATE),23))  AS VISIT_END_DATE,  --외래는 VISIT END가 없으니, 그날의 끝시간으로 맞춤.
+                     PLACE_OF_SERVICE_CONCEPT_ID = 9202, 
+                     CARE_SITE_ID = NULL, 
+                     PLACE_OF_SERVICE_SOURCE_VALUE = 'O'
+     FROM [2013_EMR_datamart].dbo.AOOPDLST
+     WHERE ISDATE(MEDDATE) = 1)V; --(17901445개 행이 영향을 받음)
+
+	
+
+--아래와 같은 데이터 삭제/ 입원기간안에 외래 데이터가 있음.
+--45327  	0003098	2006-10-13 00:00:00.000	2006-10-13 00:00:00.000	9202	NULL	O
+--172092	0003098	2006-10-10 15:43:00.000	2006-10-14 10:12:00.000	9201	NULL	I
+
+--하루에 여러번 외래로 간 환자들을 하나로 묶어주기.
+7034015	2002-09-16 10:30:00.000	2002-09-16 23:59:00.000	9202	NULL	O
+7034015	2002-09-16 12:00:00.000	2002-09-16 23:59:00.000	9202	NULL	O
+
+--데이터 확인
+SELECT * FROM VISIT_OCCURRENCE A INNER JOIN VISIT_OCCURRENCE B ON A.PERSON_ID=B.PERSON_ID
+WHERE DATEADD(HOUR,-1,B.VISIT_START_DATE) BETWEEN A.VISIT_START_DATE AND A.VISIT_END_DATE
+AND B.VISIT_END_DATE BETWEEN A.VISIT_START_DATE AND A.VISIT_END_DATE
+
+--데이터 삭제
+DELETE VO FROM VISIT_OCCURRENCE VO WHERE VO.VISIT_OCCURRENCE_ID IN (
+SELECT B.VISIT_OCCURRENCE_ID FROM VISIT_OCCURRENCE A INNER JOIN VISIT_OCCURRENCE B ON A.PERSON_ID=B.PERSON_ID
+WHERE DATEADD(HOUR,-1,B.VISIT_START_DATE) BETWEEN A.VISIT_START_DATE AND A.VISIT_END_DATE
+AND B.VISIT_END_DATE BETWEEN A.VISIT_START_DATE AND A.VISIT_END_DATE
+)
+
+
+
+
+go
+
+SET NOCOUNT OFF
+
+DELETE FROM VISIT_OCCURRENCE
+FROM VISIT_OCCURRENCE v
+WHERE NOT EXISTS(SELECT *
+                 FROM PERSON p
+                 WHERE v.PERSON_ID = p.PERSON_ID);  --(46780개 행이 영향을 받음)
+go
+
+
+/*
+DROP TABLE #tmp2;
+go
+SELECT * INTO #tmp2 FROM(
+SELECT a.person_id, 
+       YEAR(mindate) - YEAR_OF_BIRTH AS age
+FROM PERSON a INNER JOIN(
+                         SELECT person_id, 
+                                MIN(visit_start_date)AS mindate
+                         FROM VISIT_OCCURRENCE
+                         GROUP BY PERSON_ID)b 
+			ON a.PERSON_ID = b.PERSON_ID
+)v;
+go 
+*/
+
+DELETE from VISIT_OCCURRENCE WHERE VISIT_START_DATE>'2015-01-01'  --(16947개 행이 영향을 받음)
+go
+-- 태어난 날보다 앞서 visit 한 데이터는 garbage로써 삭제.
+
+DELETE from VISIT_OCCURRENCE FROM PERSON p1 INNER JOIN VISIT_OCCURRENCE vo1 ON p1.PERSON_ID=vo1.PERSON_ID
+where year(vo1.VISIT_START_DATE)-p1.YEAR_OF_BIRTH<0 --(294개 행이 영향을 받음)
+go
+
+
+CREATE index VISIT_OCCURRENCE_idx on VISIT_OCCURRENCE(person_id,visit_start_date,visit_end_date)
+go
+
+
+--입퇴원이 퇴원날짜가 입원날짜보다 앞인경우, 입원날짜를 사용하고, 퇴원날짜를 입원날짜의 밤 11시59분으로 설정.(해야함)
+
+
+###########################################
+-- END OF VISIT_OCCURENCE 
+###########################################
+
+
+
+
+###########################################
+-- START OF CONDITION_OCCURENCE
+###########################################
+
+
+--CONDITION_OCCURRENCE  
+--visit_occurrence에 입원퇴원 날짜안에 외래 데이터가 들어가있는것들도 있음. 
+--쿼리 날릴때, 조심해야함.. 중복 데이터 발생할수 있음.
+45327	0003098	2006-10-13 00:00:00.000	2006-10-13 00:00:00.000	9202	NULL	O
+172092	0003098	2006-10-10 15:43:00.000	2006-10-14 10:12:00.000	9201	NULL	I
+
+
+select top 100 * from [OMOP_Mapping].[dbo].[KCD_OMOP_mapping_end] 
+
+
+--KCD-6코드에는 H04.1B 와같은 LOCAL 코드들이 있음. 이것을 맨 마지막에 있는 H04.1 와같이 변환해주어야함.
+--아래는 이를 위한 확인 쿼리.
+SELECT TOP 1000 diagcode, 
+                RIGHT(diagcode, 1), 
+                kcd6 = CASE
+                       WHEN RIGHT(diagcode, 1)IN('A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z')THEN SUBSTRING(DIAGCODE, 1, LEN(diagcode) - 1)
+                           ELSE diagcode
+                       END
+FROM [2013_EMR_datamart].dbo.MMPDIAGT;
+
+
+DROP TABLE CONDITION_OCCURRENCE_STEP1; 
+SELECT IDENTITY(int, 1, 1)AS CONDITION_OCCURRENCE_ID, * INTO CONDITION_OCCURRENCE_STEP1
+FROM(
+
+     SELECT PATNO AS PERSON_ID, 
+		  condition_CONCEPT_ID=B.concept_id,
+            CONVERT(datetime, A.MEDDATE)AS CONDITION_START_DATE, 
+            CONDITION_END_DATE = NULL, 
+            CONDITION_TYPE_CONCEPT_ID = 37, 
+            STOP_REASON = NULL, 
+            ASSOCIATED_PROVIDER_ID = NULL,
+            --VISIT_OCCURRENCE_ID=CASE WHEN a.meddate between C.VISIT_START_DATE and C.VISIT_END_DATE THEN c.VISIT_OCCURRENCE_ID ELSE NULL END,
+            VISIT_OCCURRENCE_ID = NULL, 
+            A.DIAGCODE AS CONDITION_SOURCE_VALUE
+     FROM [2013_EMR_datamart].dbo.MMPDIAGT A INNER JOIN OMOP_Mapping.dbo.KCD_OMOP_mapping_end B 
+	ON CASE WHEN RIGHT(diagcode, 1)IN('A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z')        THEN SUBSTRING(DIAGCODE, 1, LEN(diagcode) - 1) ELSE diagcode END = B.kcd_code  INNER JOIN PERSON P ON A.PATNO = P.PERSON_ID 
+     --INNER join VISIT_OCCURRENCE c on a.patno=c.PERSON_ID 
+     WHERE 
+     --a.meddate between C.VISIT_START_DATE and C.VISIT_END_DATE AND
+     ISDATE(A.MEDDATE) = 1 AND a.MEDDATE < '2015-01-01'
+ 
+)V;  -- (19958079개 행이 영향을 받음)
+GO
+
+
+#################################################################
+--태어나기전에 진단받은 기록 제거
+----삭제하기전 확인하기 위한 쿼리
+--SELECT p1.PERSON_ID, 
+--       p1.YEAR_OF_BIRTH, 
+--       de1.CONDITION_OCCURRENCE_ID, 
+--       de1.CONDITION_CONCEPT_ID, 
+--       de1.condition_start_date, 
+--       p1.YEAR_OF_BIRTH
+--FROM PERSON p1 INNER JOIN CONDITION_OCCURRENCE_STEP1 de1 ON p1.PERSON_ID = de1.PERSON_ID
+--WHERE YEAR(de1.condition_start_date) - p1.YEAR_OF_BIRTH < 0
+--ORDER BY p1.PERSON_ID;
+
+--삭제.
+
+
+DELETE FROM CONDITION_OCCURRENCE_STEP1
+FROM PERSON p1 INNER JOIN CONDITION_OCCURRENCE_STEP1 de1 ON p1.PERSON_ID = de1.PERSON_ID
+WHERE 
+de1.condition_start_date<cast((p1.YEAR_OF_BIRTH+'-'+p1.MONTH_OF_BIRTH+'-'+p1.DAY_OF_BIRTH) as datetime)
+
+
+
+
+
+
+GO
+#################################################################
+
+DELETE from CONDITION_OCCURRENCE_STEP1 where ISNUMERIC(person_id)=0 
+GO
+
+UPDATE CONDITION_OCCURRENCE_STEP1
+  SET VISIT_OCCURRENCE_ID = B.VISIT_OCCURRENCE_ID
+  FROM CONDITION_OCCURRENCE_step1 a INNER JOIN VISIT_OCCURRENCE B ON A.person_id = B.PERSON_ID
+  WHERE a.CONDITION_START_DATE BETWEEN B.VISIT_START_DATE AND B.VISIT_END_DATE;
+GO
+
+
+delete from CONDITION_OCCURRENCE_STEP1 from CONDITION_OCCURRENCE_STEP1 a where not EXISTS (select * from PERSON b where A.person_id=b.PERSON_ID)
+GO
+
+DROP TABLE CONDITION_OCCURRENCE
+go
+sp_rename 'CONDITION_OCCURRENCE_STEP1','CONDITION_OCCURRENCE'
+go
+CREATE index CONDITION_OCCURRENCE_idx on CONDITION_OCCURRENCE(person_id,CONDITION_START_DATE)
+go
+
+SELECT P1.PERSON_ID,YEAR_OF_BIRTH,MONTH_OF_BIRTH,DAY_OF_BIRTH,CONDITION_START_DATE
+FROM PERSON p1 INNER JOIN CONDITION_OCCURRENCE de1 ON p1.PERSON_ID = de1.PERSON_ID
+WHERE de1.condition_start_date<cast((p1.YEAR_OF_BIRTH+'-'+p1.MONTH_OF_BIRTH+'-'+p1.DAY_OF_BIRTH) as datetime)
+
+
+
+--VISIT_OCCURRENCE_ID가 안들어온사람들 왜 안들어 왔는지 보기
+DELETE from CONDITION_OCCURRENCE WHERE VISIT_OCCURRENCE_ID IS NULL 
+GO
+
+
+########################################################################################################################
+
+DRUG_EXPOSURE 
+
+########################################################################################################################
+select * from [OMOP_Mapping].[dbo].[EDI_rxnormATC_mapping]
+select * from [OMOP_Mapping].[dbo].[EDIMaster]
+
+
+SELECT * FROM [OMOP_Mapping].[dbo].[Drug_SIG]
+SELECT COUNT(*) FROM [AJOU_ODS].[dbo].[DW_MMMEDORT_EN] --42214213
+SELECT top 10 * FROM [AJOU_ODS].[dbo].[DW_MMMEDORT_EN] 
+
+--DRUG SIG와 QUANTITY 추가 작업 필요.
+DROP TABLE DRUG_EXPOSURE_step1
+
+SELECT IDENTITY(INT,1,1) AS DRUG_EXPOSURE_ID, * INTO DRUG_EXPOSURE_step1 FROM (
+
+	SELECT PATNO AS PERSON_ID,B.concept_id AS DRUG_CONCEPT_ID,CONVERT(DATETIME,CONVERT(VARCHAR(20),A.REGTIME,120),120) AS DRUG_EXPOSURE_START_DATE,CONVERT(DATETIME,CONVERT(VARCHAR(10),DATEADD(DD,A.[DAY],A.ORDDATE),120),120) AS DRUG_EXPOSURE_END_DATE,
+	DRUG_TYPE_CONCEPT_ID=28000178,NCEPT_ID=36,STOP_REASON=NULL,REFILLS=NULL,
+	--QUANTITY=CONVERT(VARCHAR(10),CONTQTY)+'_'+CONTUNIT,
+	QUANTITY=CONTQTY,
+	DAYS_SUPPLY=A.[DAY],
+	SIG=NULL,
+	PRESCRIBING_PROVIDER_ID=NULL,
+	VISIT_OCCURRENCE_ID=null,
+	RELEVANT_CONDITION_CONCEPT_ID=NULL,
+	DRUG_SOURCE_VALUE=B.insedicode
+	FROM [2013_EMR_datamart].[dbo].[MMMEDORT] A INNER JOIN [OMOP_Mapping].[dbo].[EDI_rxnormATC_mapping] B
+	ON A.ORDCODE=B.ORDCODE 	
+	WHERE A.DCYN='N' and A.CONTQTY>=0  and a.ORDDATE <'2015-01-01'
+
+)V--(91078860개 행이 영향을 받음)  //N수가 안맞음, 확인 필요함.
+go
+
+
+DELETE FROM DRUG_EXPOSURE_step1
+FROM DRUG_EXPOSURE_step1 v
+WHERE NOT EXISTS(SELECT *
+                 FROM PERSON p
+                 WHERE v.PERSON_ID = p.PERSON_ID); --(304310개 행이 영향을 받음)
+
+
+
+UPDATE DRUG_EXPOSURE_step1
+  SET VISIT_OCCURRENCE_ID = B.VISIT_OCCURRENCE_ID
+  FROM DRUG_EXPOSURE_step1 a INNER JOIN VISIT_OCCURRENCE B ON A.person_id = B.PERSON_ID
+  WHERE a.DRUG_EXPOSURE_END_DATE BETWEEN B.VISIT_START_DATE AND B.VISIT_END_DATE;
+GO
+
+
+
+DROP table DRUG_EXPOSURE
+GO
+
+sp_rename 'DRUG_EXPOSURE_step1','DRUG_EXPOSURE'
+GO
+
+--태어나기도 전에 처방받은 약물 삭제.
+DELETE from DRUG_EXPOSURE FROM PERSON p1 INNER JOIN DRUG_EXPOSURE de1 ON p1.PERSON_ID=de1.PERSON_ID
+where year(de1.DRUG_EXPOSURE_START_DATE)-p1.YEAR_OF_BIRTH<0
+go
+
+
+
+
+
+CREATE index DRUG_EXPOSURE_idx on DRUG_EXPOSURE(person_id,DRUG_EXPOSURE_start_DATE,DRUG_EXPOSURE_END_DATE)
+go
+
+
+----여기부터
+DELETE from DRUG_EXPOSURE where ISNUMERIC(person_id)=0 --82
+GO
+
+
+########################################################################################################################
+--END OF DRUG_EXPOSURE 
+########################################################################################################################
+
+
+
+
+
+########################################################################################################################
+--PROCEDURE_OCCURRENCE 
+########################################################################################################################
+
+SELECT top 10 * from [OMOP_Mapping].[dbo].[Anesthesia_master]
+
+
+
+select IDENTITY(INT,1,1) as PROCEDURE_OCCURRENCE_ID  , * into  PROCEDURE_OCCURRENCE_step1 from (
+select a.patno as PERSON_ID,c.CONCEPT_ID as PROCEDURE_CONCEPT_ID, convert(datetime,a.ORDDATE) as PROCEDURE_DATE,
+PROCEDURE_TYPE_CONCEPT_ID='38000275', ASSOCIATED_PROVIDER_ID=NULL,
+VISIT_OCCURRENCE_ID=NULL,
+RELEVANT_CONDITION_CONCEPT_ID=null,a.ORDCODE as PROCEDURE_SOURCE_VALUE
+from [2013_EMR_datamart].dbo.mmtrtort a  inner join [OMOP_Mapping].[dbo].[Anesthesia_master] c on a.ordcode=c.ordcode
+where a.ORDDATE<'2015-01-01'
+ )v
+
+
+
+
+ sp_help PROCEDURE_OCCURRENCE_step1
+
+
+ select count(distinct procedure_concept_id) from PROCEDURE_OCCURRENCE
+
+
+UPDATE PROCEDURE_OCCURRENCE_step1 SET VISIT_OCCURRENCE_ID=B.VISIT_OCCURRENCE_ID FROM  PROCEDURE_OCCURRENCE_step1 a inner join VISIT_OCCURRENCE B ON A.person_id=B.PERSON_ID
+where a.PROCEDURE_DATE between B.VISIT_START_DATE and B.VISIT_END_DATE
+
+
+
+select top 100 * from PROCEDURE_OCCURRENCE_step1
+drop table PROCEDURE_OCCURRENCE
+go
+
+sp_rename 'PROCEDURE_OCCURRENCE_step1','PROCEDURE_OCCURRENCE'
+go
+
+DELETE from PROCEDURE_OCCURRENCE FROM PERSON p1 INNER JOIN PROCEDURE_OCCURRENCE pc1 ON p1.PERSON_ID=pc1.PERSON_ID
+where pc1.PROCEDURE_DATE<cast((p1.YEAR_OF_BIRTH+'-'+p1.MONTH_OF_BIRTH+'-'+p1.DAY_OF_BIRTH) as datetime)
+
+
+sp_help PROCEDURE_OCCURRENCE
+
+DELETE from PROCEDURE_OCCURRENCE where ISNUMERIC(person_id)=0 --(2799584개 행이 영향을 받음)
+
+DELETE from DRUG_EXPOSURE where ISNUMERIC(person_id)=0 --(2799584개 행이 영향을 받음)
+DELETE from DRUG_ERA where ISNUMERIC(person_id)=0 --(2799584개 행이 영향을 받음)
+DELETE FROM OBSERVATION WHERE ISNUMERIC(person_id)=0 --(2799584개 행이 영향을 받음)
+
+BEGIN TRAN
+delete FROM PROCEDURE_OCCURRENCE from PROCEDURE_OCCURRENCE a
+where NOT EXISTS (select * from PERSON b where a.PERSON_ID=b.PERSON_ID)
+--(26480201개 행이 영향을 받음)
+
+delete FROM PROCEDURE_OCCURRENCE where PERSON_ID NOT IN (select DISTINCT PERSON_ID from PERSON)
+--(26480201개 행이 영향을 받음)
+
+
+ROLLBACK
+
+COMMIT
+delete FROM DRUG_ERA from DRUG_ERA a
+where NOT EXISTS (select * from PERSON b where a.PERSON_ID=b.PERSON_ID)
+
+delete FROM OBSERVATION from OBSERVATION a
+where NOT EXISTS (select * from PERSON b where a.PERSON_ID=b.PERSON_ID)
+
+
+select TOP 10 * FROM OBSERVATION WHERE isdate(observation_date)=0 --(2799584개 행이 영향을 받음)
+
+
+CREATE index PROCEDURE_OCCURRENCE_idx on PROCEDURE_OCCURRENCE(person_id,PROCEDURE_DATE)
+ 
+
+
+
+ 
+########################################################################################################################
+--OBSERVATION   
+########################################################################################################################
+
+
+--[laboratory_master_LOINC] 테이블에 중복되는게 있기때문에 밑의 데이터도 중복되는게 있을수 있다.
+-- 확인필요.
+
+--전체를 돌리면, 물리적 메모리 에러 발생.
+--단위 테스트중.
+
+drop table OBSERVATION_step1
+
+select * into OBSERVATION_step1 from (
+
+	select  a.patno as PERSON_ID,c.concept_id as OBSERVATION_CONCEPT_ID,
+	CONVERT(VARCHAR(10),A.colltime,120) as OBSERVATION_DATE
+	,colltime as OBSERVATION_TIME
+	,cast(rsltnum  as float) as VALUE_AS_NUMBER
+	,VALUE_AS_STRING=NULL
+	,VALUE_AS_CONCEPT_ID=null
+	,UNIT_CONCEPT_ID=NULL -- Vocabulary_id=’11’에서 매핑하여 가져옴?? 확인.
+	,cast(a.NORMMINVAL as float) as RANGE_LOW
+	,cast(a.normmaxval as float) as RANGE_HIGH 
+	,OBSERVATION_TYPE_CONCEPT_ID=38000277 --숫자 값 인 경우: concept_id=’38000277’ (lab observation numeric result) 
+										-- Text인 경우: concept_id=’ 38000278’ (lab observation text)
+	,ASSOCIATED_PROVIDER_ID=1
+	,VISIT_OCCURRENCE_ID=null
+	,RELEVANT_CONDITION_CONCEPT_ID=null
+	,c.ordcode as OBSERVATION_SOURCE_VALUE 
+	,UNITS_SOURCE_VALUE=a.UNIT
+	from 
+	[PMS_datamart2013].[dbo].[sltrstmt_pms_1] a
+	INNER join 
+	 (select distinct ordcode,spccode,concept_id from [OMOP_Mapping].[dbo].[laboratory_master_LOINC]) c ON a.EXAMCODE=c.ordcode
+
+	where colltime<'2015-01-01'
+
+)v --(5399718개 행이 영향을 받음)
+go
+
+
+
+select TOP 1000 * from [PMS_datamart2013].[dbo].[sltrstmt_pms_1]
+select distinct ordcode,spccode,concept_id from [OMOP_Mapping].[dbo].[laboratory_master_LOINC]
+
+select * from [OMOP_Mapping].[dbo].[laboratory_master_LOINC]
+
+
+update OBSERVATION_step1 SET VISIT_OCCURRENCE_ID=C.VISIT_OCCURRENCE_ID FROM OBSERVATION_step1 a inner join VISIT_OCCURRENCE C ON A.person_id=C.PERSON_ID
+	where CONVERT(DATETIME,a.OBSERVATION_DATE) between CONVERT(DATETIME,C.VISIT_START_DATE) and CONVERT(DATETIME,C.VISIT_END_DATE)
+go
+
+delete FROM OBSERVATION_step1 where VISIT_OCCURRENCE_ID IS null
+go
+delete FROM OBSERVATION where VISIT_OCCURRENCE_ID IS null
+go
+DROP TABLE OBSERVATION
+sp_rename 'OBSERVATION_step1','OBSERVATION'
+go
+
+
+alter table observation alter column person_id int
+
+CREATE index OBSERVATION_idx on OBSERVATION(person_id,OBSERVATION_DATE)
+
+--왜 visit_occurrence_id가 없는지 확인..
+--observation date 이 날짜까지만 있는경우가 있음.. 이럴때, 처리를 어떻게 해야할지 확인해야함.
+SELECT A.PERSON_ID,A.OBSERVATION_DATE,B.VISIT_START_DATE,B.VISIT_END_DATE FROM (SELECT TOP 100 * FROM OBSERVATION_step1 WHERE VISIT_OCCURRENCE_ID is null) A INNER JOIN VISIT_OCCURRENCE B ON A.person_id=B.PERSON_ID
+ORDER BY A.PERSON_ID,B.VISIT_START_DATE
+
+
+
+
+##############################
+dependancy 확인..
+##############################
+
+CONDITION_OCCURRENCE의 데이터는 있지만,  그 사람의 OBSERVATION_PERIOD는 없는 데이터가 있음
+삭제 필요
+--
+
+DELETE FROM condition_occurrence
+FROM condition_occurrence A INNER JOIN
+     (
+	 SELECT CO1.PERSON_ID, 
+             co1.CONDITION_START_DATE
+      FROM
+           condition_occurrence AS co1 LEFT JOIN
+           observation_period AS op1
+           ON op1.person_id = co1.person_id
+          AND (co1.condition_start_date BETWEEN op1.observation_period_start_date AND op1.observation_period_end_date)
+      WHERE op1.person_id IS NULL )B
+     ON A.PERSON_ID = B.PERSON_ID
+    AND A.CONDITION_START_DATE = B.CONDITION_START_DATE;
+
+GO
+
+
+
+----------------------------------------------
+
+
+
+
+
+--ORGANIZATION
+SELECT * INTO ORGANIZATION FROM (
+SELECT ORGANIZATION_ID=1,
+PLACE_OF_SERVICE_CONCEPT_ID=1,
+LOCATION_ID=1,
+ORGANIZATION_SOURCE_VALUE='SUWON',
+PLACE_OF_SERVICE_SOURCE_VALUE='HOSPITAL'
+)V
+
+
+--DRUG_COST
+SELECT * INTO DRUG_COST FROM (
+SELECT DRUG_COST_ID=NULL,
+DRUG_EXPOSURE_ID=NULL,
+PAID_COPAY=NULL,
+PAID_COINSURANCE=NULL,
+PAID_TOWARD_DEDUCTIBLE=NULL,
+PAID_BY_PAYER=NULL,
+PAID_BY_COORDINATION_BENEFITS=NULL,
+TOTAL_OUT_OF_POCKET=NULL,
+TOTAL_PAID=NULL,
+INGREDIENT_COST=NULL,
+DISPENSING_FEE=NULL,
+AVERAGE_WHOLESALE_PRICE=NULL,
+PAYER_PLAN_PERIOD_ID=NULL)V
+
+
+--PROCEDURE_COST
+SELECT * INTO PROCEDURE_COST FROM (
+SELECT PROCEDURE_COST_ID=NULL,
+PROCEDURE_OCCURRENCE_ID=NULL,
+PAID_COPAY=NULL,
+PAID_COINSURANCE=NULL,
+PAID_TOWARD_DEDUCTIBLE=NULL,
+PAID_BY_PAYER=NULL,
+PAID_BY_COORDINATION_BENEFITS=NULL,
+TOTAL_OUT_OF_POCKET=NULL,
+TOTAL_PAID=NULL,
+DISEASE_CLASS_CONCEPT_ID=NULL,
+REVENUE_CODE_CONCEPT_ID=NULL,
+PAYER_PLAN_PERIOD_ID=NULL,
+DISEASE_CLASS_SOURCE_VALUE=NULL,
+REVENUE_CODE_SOURCE_VALUE=NULL)V
+
+
+--PAYER_PLAN_PERIOD
+SELECT * INTO PAYER_PLAN_PERIOD FROM (
+SELECT PAYER_PLAN_PERIOD_ID=NULL,
+PERSON_ID=NULL,
+PAYER_PLAN_PERIOD_START_DATE=NULL,
+PAYER_PLAN_PERIOD_END_DATE=NULL,
+PAYER_SOURCE_VALUE=NULL,
+PLAN_SOURCE_VALUE=NULL,
+FAMILY_SOURCE_VALUE=NULL
+)V
+
+alter table PAYER_PLAN_PERIOD alter column PAYER_PLAN_PERIOD_START_DATE datetime
+alter table PAYER_PLAN_PERIOD alter column PAYER_PLAN_PERIOD_END_DATE datetime
+sp_help PAYER_PLAN_PERIOD
+
+SELECT * INTO COHORT FROM (
+SELECT 
+COHORT_ID=NULL,
+COHORT_CONCEPT_ID=NULL,
+COHORT_START_DATE=NULL,
+COHORT_END_DATE=NULL,
+SUBJECT_ID=NULL,
+STOP_REASON=NULL)V
+
+ALTER table cohort alter column COHORT_START_DATE datetime
+ALTER table cohort alter column COHORT_end_DATE datetime
