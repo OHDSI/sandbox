@@ -1,0 +1,137 @@
+-- ###########################################################
+-- Observation Period calculation for OMOP CDM v4.0 in MSSQL
+-- by Man Young Park, PhD, Ajou University School of Medicine
+-- The Korean will be rewritten in English later.
+-- ###########################################################
+
+
+SET NOCOUNT ON
+DROP TABLE observation_period_step1
+
+SELECT * INTO observation_period_step1
+FROM(
+     SELECT *, 
+            ROW_NUMBER()OVER(PARTITION BY person_id ORDER BY VISIT_START_DATE)AS ordRk
+     FROM DBO.VISIT_OCCURRENCE)v;
+
+
+DROP TABLE 	observation_period_step2
+SELECT * INTO observation_period_step2
+FROM(
+     SELECT a.visit_occurrence_id, 
+            a.person_id, 
+            a.ordrk, 
+            a.visit_start_date, 
+            a.visit_end_date, 
+            DATEDIFF(dd, a.visit_start_date, b.visit_START_date)AS days, 
+            b.visit_start_date AS visit_start_date2, 
+            b.visit_end_date AS visit_end_date2, 
+            b.ordrk AS ordrk2
+     FROM
+          observation_period_step1 a LEFT JOIN
+          observation_period_step1 b
+          ON a.person_id = b.person_id
+         AND a.ordRk = CAST(b.ordRk AS int) - 1)v
+ORDER BY PERSON_id, visit_start_date;
+
+GO
+
+
+DROP TABLE observation_period_step3
+SELECT * INTO observation_period_step3
+FROM(
+     SELECT *, 
+            fg = CASE
+                 WHEN days < 30 THEN 1
+                 WHEN(SELECT days
+                      FROM observation_period_step2 a
+                      WHERE a.person_id = b.person_id
+                        AND a.ordrk = b.ordrk - 1) < 30 THEN 1000
+                 END, 
+            fg2 = NULL
+     FROM observation_period_step2 b)v;
+
+GO
+
+
+DROP TABLE observation_period_step4_NULL
+SELECT * INTO observation_period_step4_NULL FROM (
+SELECT * FROM observation_period_step3 WHERE FG IS NULL
+)V
+GO
+
+DROP TABLE observation_period_step4_NOTNULL
+SELECT * INTO observation_period_step4_NOTNULL FROM (
+SELECT * FROM observation_period_step3 WHERE FG IS NOT NULL
+)V
+GO
+
+create index observation_period_step4_NOTNULL_idx on observation_period_step4_NOTNULL(visit_occurrence_id)
+
+--##################커서로 그룹핑을 지어준다.#######################################
+--커서선언
+
+update observation_period_step4_NOTNULL SET fg2=null
+
+DECLARE cur_PMY CURSOR
+FOR
+SELECT  visit_occurrence_id,person_id,
+--visit_start_date,visit_end_date,days,visit_start_date2,visit_end_date2,
+fg 
+FROM observation_period_step4_NOTNULL ORDER BY PERSON_ID,ORDRK
+--커서오픈
+OPEN cur_PMY
+--변수선언
+DECLARE @visit_occurrence_id varchar(10)
+DECLARE @person_id varchar(10)
+DECLARE @visit_start_date varchar(20)
+DECLARE @visit_end_date varchar(20)
+DECLARE @days int
+DECLARE @visit_start_date2 VARCHAR(20)
+DECLARE @visit_end_date2 VARCHAR(20)
+DECLARE @fg int
+DECLARE @i int
+ 
+
+FETCH NEXT FROM cur_PMY INTO @visit_occurrence_id,@person_id,@fg
+SET @i=1
+
+WHILE @@FETCH_STATUS = 0
+BEGIN
+
+IF @FG=1 OR @FG=1000
+ BEGIN 
+	update observation_period_step4_NOTNULL SET fg2=@i where visit_occurrence_id=@visit_occurrence_id
+ END
+
+if @fg is null or @fg=1000 
+begin 
+	SET @i=@i+1	
+end
+
+FETCH NEXT FROM cur_PMY INTO @visit_occurrence_id,@person_id,@fg
+END
+CLOSE cur_PMY
+DEALLOCATE cur_PMY
+GO
+
+
+
+DROP TABLE OBSERVATION_PERIOD
+SELECT IDENTITY(INT,1,1) AS OBSERVATION_PERIOD_ID,* INTO OBSERVATION_PERIOD FROM (
+SELECT PERSON_ID,MIN(VISIT_START_DATE) AS OBSERVATION_PERIOD_START_DATE,MAX(VISIT_END_DATE) AS OBSERVATION_PERIOD_END_DATE
+FROM OBSERVATION_PERIOD_STEP4_NOTNULL 
+GROUP BY PERSON_ID,FG2
+UNION
+SELECT PERSON_ID,VISIT_START_DATE AS OBSERVATION_PERIOD_START_DATE,VISIT_END_DATE AS OBSERVATION_PERIOD_END_DATE FROM observation_period_step4_NULL 
+)V ORDER BY PERSON_ID,V.OBSERVATION_PERIOD_START_DATE
+GO
+
+
+CREATE index OBSERVATION_PERIOD_idx on OBSERVATION_PERIOD(person_id,OBSERVATION_PERIOD_START_DATE,OBSERVATION_PERIOD_END_DATE)
+GO
+
+--진행상황 확인  쿼리.
+select convert(varchar(10),cast(1.0*count(*)/14167805*100 as numeric(5,2))) +'%'
+from observation_period_step4_NOTNULL where fg2 is not null
+
