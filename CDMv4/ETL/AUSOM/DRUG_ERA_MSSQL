@@ -1,0 +1,173 @@
+-- ###########################################################
+-- Drug Era calculation for OMOP CDM v4.0 in MSSQL
+-- by Man Young Park, PhD, Ajou University School of Medicine
+-- The Korean will be rewritten in English later.
+-- ###########################################################
+
+SET NOCOUNT ON 
+
+drop table DRUG_ERA_STEP1
+select * into DRUG_ERA_STEP1 from (
+SELECT  *,ROW_NUMBER() over (PARTITION BY person_id,drug_concept_id ORDER by DRUG_EXPOSURE_START_DATE) as ordRk  FROM [DBO].DRUG_EXPOSURE
+)v
+go
+
+
+drop table DRUG_ERA_STEP1_tmp
+select * into DRUG_ERA_STEP1_tmp from (
+select drug_exposure_id,PERSON_ID,DRUG_CONCEPT_ID,DRUG_EXPOSURE_START_DATE,DRUG_EXPOSURE_end_DATE,ordrk from DRUG_ERA_STEP1
+)v order by person_id,drug_concept_id,DRUG_EXPOSURE_START_DATE
+go
+
+drop table DRUG_ERA_STEP2_tmp
+select * into DRUG_ERA_STEP2_tmp from (
+select a.*,b.drug_exposure_start_date as drug_exposure_start_date2, b.drug_exposure_end_date as drug_exposure_end_date2, 
+DATEDIFF(dd,a.drug_exposure_end_date,b.drug_exposure_start_date) as days from DRUG_ERA_STEP1_tmp a left join DRUG_ERA_STEP1_tmp b 
+on a.PERSON_ID=b.person_id and a.DRUG_CONCEPT_ID=b.DRUG_CONCEPT_ID and a.ordRk=cast(b.ordRk as int)-1
+--where datediff(dd,a.drug_exposure_end_date,b.DRUG_EXPOSURE_END_DATE)>0
+
+)v order by v.person_id,v.drug_concept_id,v.DRUG_EXPOSURE_START_DATE
+go
+
+sp_help DRUG_ERA_STEP3_tmp
+
+drop table DRUG_ERA_STEP3_tmp
+select * into DRUG_ERA_STEP3_tmp FROM (
+select *,fg=CASE WHEN [days]<30  then 1
+                 when  (select [days] from DRUG_ERA_STEP2_tmp a WHERE a.person_id=b.person_id and a.DRUG_CONCEPT_ID=b.DRUG_CONCEPT_ID and a.ordrk=b.ordrk-1)<30 THEN 1000 end
+,fg2=null
+from DRUG_ERA_STEP2_tmp b
+)v
+go
+--select  * from DRUG_ERA_STEP3_tmp
+--order by person_id,drug_concept_id,DRUG_EXPOSURE_START_DATE
+
+
+drop table DRUG_ERA_STEP4_tmp_null
+SELECT * INTO DRUG_ERA_STEP4_tmp_null FROM (
+SELECT * FROM DRUG_ERA_STEP3_tmp WHERE FG IS NULL
+)V
+go
+
+drop table DRUG_ERA_STEP4_tmp_notnull
+SELECT * INTO DRUG_ERA_STEP4_tmp_notnull FROM (
+SELECT * FROM DRUG_ERA_STEP3_tmp WHERE FG IS NOT NULL
+)V
+go
+
+create index DRUG_ERA_STEP4_tmp_notnull_idx on DRUG_ERA_STEP4_tmp_notnull(drug_exposure_id)
+
+go
+
+--커서오픈
+
+--##################커서로 그룹핑을 지어준다.#######################################
+--커서선언
+
+update DRUG_ERA_STEP4_tmp_notnull SET fg2=null
+
+DECLARE cur_PMY CURSOR
+FOR
+SELECT --visit_occurrence_id,person_id,visit_start_date,visit_end_date,days,visit_start_date2,visit_end_date2,fg 
+       [drug_exposure_id]
+         ,[PERSON_ID]
+     
+      ,[fg]
+FROM DRUG_ERA_STEP4_tmp_notnull
+order by person_id,drug_concept_id,DRUG_EXPOSURE_START_DATE
+
+--커서오픈
+OPEN cur_PMY
+--변수선언
+DECLARE @drug_exposure_id varchar(10)
+DECLARE @person_id varchar(10)
+DECLARE @fg int
+DECLARE @i int
+ 
+FETCH NEXT FROM cur_PMY INTO @drug_exposure_id,@person_id,@fg
+SET @i=1
+
+WHILE @@FETCH_STATUS = 0
+BEGIN
+
+IF @FG=1 OR @FG=1000
+ BEGIN 
+	update DRUG_ERA_STEP4_tmp_notnull SET fg2=@i where drug_exposure_id=@drug_exposure_id
+ END
+
+if @fg is null or @fg=1000 
+begin 
+	SET @i=@i+1	
+end
+
+
+FETCH NEXT FROM cur_PMY INTO @drug_exposure_id,@person_id,@fg
+END
+CLOSE cur_PMY
+DEALLOCATE cur_PMY
+GO
+--##################커서로 그룹핑 끝.#######################################
+
+DROP TABLE DRUG_ERA 
+
+SELECT  IDENTITY(INT,1,1)  AS DRUG_ERA_ID, * INTO DRUG_ERA FROM (
+SELECT 
+PERSON_ID,
+DRUG_CONCEPT_ID,
+min(drug_exposure_start_date) as DRUG_ERA_START_DATE,
+max(drug_exposure_end_date) as  DRUG_ERA_END_DATE,
+DRUG_TYPE_CONCEPT_ID=null,
+count(*) AS DRUG_EXPOSURE_COUNT
+FROM DRUG_ERA_STEP4_tmp_notnull 
+group by PERSON_ID, DRUG_CONCEPT_ID,fg2
+union 
+
+select PERSON_ID,DRUG_CONCEPT_ID,drug_exposure_start_date as DRUG_ERA_START_DATE,drug_exposure_end_date as  DRUG_ERA_END_DATE,
+ DRUG_TYPE_CONCEPT_ID=null,
+ DRUG_EXPOSURE_COUNT=1
+ from DRUG_ERA_STEP4_tmp_null
+
+)V
+
+
+
+create index DRUG_ERA_idx on DRUG_ERA(person_id,drug_concept_id,drug_era_start_Date)
+GO
+
+
+update drug_exposure set quantity=100 where quantity>100
+update drug_exposure set days_supply=170 where days_supply>180
+
+
+update ACHILLES_results_dist set avg_value=90.0  where analysis_id = 1007 AND  avg_value>100
+
+--걸리는 시간 체크
+select count(*) from DRUG_ERA where fg2 is not null
+
+select convert(varchar(10),cast(1.0*count(*)/2739430*100 as numeric(5,2))) +'%'
+from DRUG_ERA_STEP4_TMP_NOTNULL where fg2 is not null
+
+
+
+
+
+select year(drug_era_start_date),count(*) from DRUG_ERA
+group by year(drug_era_start_date)
+order by 1
+
+
+
+
+select year(drug_exposure_start_date),count(*) from DRUG_EXPOSURE
+group by year(drug_exposure_start_date)
+order by 1
+
+
+
+select year(drug_exposure_start_date),count(*) from DRUG_ERA_STEP4_TMP_NOTNULL
+group by year(drug_exposure_start_date)
+order by 1
+
+
+
+select DRUG_ERA_STEP4_TMP_NOTNULL
