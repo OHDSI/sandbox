@@ -63,7 +63,7 @@ create table @studyName_A
 select  '02G2',a.cnt, 'count of patients'
 FROM
 (
-	select count(*) cnt from @cdmSchema.dbo.person
+	select count(*) cnt from @cdmSchema.person
 ) a
 ;
 
@@ -76,13 +76,13 @@ select  '01G1',a.cnt, 'count of events'
 FROM
 (
 select 
-(select count(*)   from @cdmSchema.dbo.person)
-+(select count(*)  from @cdmSchema.dbo.observation)
-+(select count(*)  from @cdmSchema.dbo.condition_occurrence)
-+(select count(*)  from @cdmSchema.dbo.drug_exposure)
-+(select count(*)  from @cdmSchema.dbo.visit_occurrence)
-+(select count(*)  from @cdmSchema.dbo.death)
-+(select count(*)  from @cdmSchema.dbo.procedure_occurrence) cnt
+(select count(*)   from @cdmSchema.person)
++(select count(*)  from @cdmSchema.observation)
++(select count(*)  from @cdmSchema.condition_occurrence)
++(select count(*)  from @cdmSchema.drug_exposure)
++(select count(*)  from @cdmSchema.visit_occurrence)
++(select count(*)  from @cdmSchema.death)
++(select count(*)  from @cdmSchema.procedure_occurrence) cnt
 ) a
 ;
 
@@ -93,9 +93,9 @@ FROM
 (
   select count(*) cnt from
   (
-  select distinct person_id from @cdmSchema.dbo.condition_occurrence
+  select distinct person_id from @cdmSchema.condition_occurrence
   intersect
-  select distinct person_id from @cdmSchema.dbo.drug_exposure
+  select distinct person_id from @cdmSchema.drug_exposure
   ) b
 ) a
 ;
@@ -107,9 +107,9 @@ FROM
 (
   select count(*) cnt from
   (
-  select distinct person_id from @cdmSchema.dbo.condition_occurrence
+  select distinct person_id from @cdmSchema.condition_occurrence
   intersect
-  select distinct person_id from @cdmSchema.dbo.procedure_occurrence
+  select distinct person_id from @cdmSchema.procedure_occurrence
   ) b
 ) a
 ;
@@ -121,11 +121,11 @@ FROM
 (
   select count(*) cnt from
   (
-  select distinct person_id from @cdmSchema.dbo.observation
+  select distinct person_id from @cdmSchema.observation
   intersect
-  select distinct person_id from @cdmSchema.dbo.condition_occurrence
+  select distinct person_id from @cdmSchema.condition_occurrence
   intersect
-  select distinct person_id from @cdmSchema.dbo.drug_exposure
+  select distinct person_id from @cdmSchema.drug_exposure
   ) b
 ) a
 ;
@@ -135,7 +135,7 @@ FROM
 select  'D5',a.cnt, 'count of deceased patients'
 FROM
 (
-  select count(*) cnt from @cdmSchema.dbo.death  
+  select count(*) cnt from @cdmSchema.death  
 ) a
 ;
 
