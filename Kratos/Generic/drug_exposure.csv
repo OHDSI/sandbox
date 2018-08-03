@@ -1,5 +1,5 @@
 drug_exposure_id,person_id,drug_concept_id,drug_exposure_start_date,5,6,7,8,drug_type_concept_id,10,refills,days_supply,sig,14,15,16
-,1,0,1/1/2000,,,,,38000177,,null,90,one pill a day,,,
-,,,1/4/2000,,,,,38000175,,null,90,,,,
+,1,0,2000-01-01,,,,,38000177,,null,90,one pill a day,,,
+,,,2000-01-04,,,,,38000175,,null,90,,,,
 ,,,3/30/2000,,,,,38000177,,1,90,,,,
 ,,,4/15/2000,,,,,38000175,,1,90,,,,
