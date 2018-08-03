@@ -1,5 +1,13 @@
+<<<<<<< HEAD
+drug_exposure_id,person_id,drug_concept_id,drug_exposure_start_date,5,drug_exposure_end_date,7,8,drug_type_concept_id,10,refills,days_supply,sig,14,15,16
+1,1,0, 2000-01-01,, 2000-03-30,,,38000177,,null,90,one pill a day,,,
+2,1,0, 2000-01-04,, 2000-04-05,,,38000175,,null,90,,,,
+3,1,0, 2000-03-30,, 2000-06-30,,,38000177,,1,90,,,,
+4,1,0, 2000-04-15,, 2000-07-15,,,38000175,,1,90,,,,
+=======
 drug_exposure_id,person_id,drug_concept_id,drug_exposure_start_date,5,6,7,8,drug_type_concept_id,10,refills,days_supply,sig,14,15,16
 ,1,0,2000-01-01,,,,,38000177,,null,90,one pill a day,,,
 ,,,2000-01-04,,,,,38000175,,null,90,,,,
 ,,,3/30/2000,,,,,38000177,,1,90,,,,
 ,,,4/15/2000,,,,,38000175,,1,90,,,,
+>>>>>>> 5b5801fc05961c6d0209fed487e037291eb9b7fb
