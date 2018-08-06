@@ -4,11 +4,18 @@ Example data.
 Each patient demostrates one or more features of CDM. Some features do not require a patient to demostrate
 
 # Problems
-## 1 Days of supply (order and dispensation)
+Title describes the problem. If it is demostrated on a person_id, it is listed in brackets after title
+## Days of supply (order and dispensation) (1)
+Patient 1 data comes from EHR system that provides pharmacy prescription data data. At the same time, there is dispensation data.
+It is now 2018. Data from early 2000 indicate a visit to a provider on Jan 1 where a drug is prescribed with one refill. The patient picks up the prescription on Jan 4th. Without any visit to any doctor, the patient picks up in pharmacy a refill 1 on April 15th. The sample data has 1 row for original prescription, 1 row for ETL derived prescription data and 2 dispensation rows when patient 1 picked up medication from pharmacy.  
+
+http://forums.ohdsi.org/t/days-supply-yet-again/4741/15  
 
 
-## 2 Hysterectomy
 
+## Hysterectomy (2;3)
+
+Patient 2 had a hysterectomy at the age of 52 when no EHR data exist. At age 65, there is a code for 'history of hysterectomy' documented in claims data. Patient 3 had hysterectomy at age 56 and direct procedure is recorded (not as history code).
 
 
 
