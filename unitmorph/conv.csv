@@ -1,4 +1,4 @@
 measurement_concept_id,unit_concept_id,factor,target_unit_concept_id,note
 3036277,9330,2.54,8582,height; inches;cm
 3036277,9546,100,8582,height;m;cm
-3020460,8840,10,8751,C reactive protein [Mass/volume] in Serum or Plasma;mg/dL;mg/L
+3020460,8840,10,8751,C reactive protein [Mass/volume] in Serum or Plasma;mg/dL;g/L
