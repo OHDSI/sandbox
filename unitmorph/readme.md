@@ -2,7 +2,7 @@
 
 This repo contains a set of code that helps OMOP sites to convert measurements into data-driven target units.
 
-ThemisConcepts OHDSI network study provided (presented at AMIA 2019 as poster) a single concensus unit for each measurement (e.g., cm for height). UnitMorph builds upon that result.
+ThemisConcepts OHDSI network study provided (presented at AMIA 2019 as poster) a single concensus unit for each measurement (e.g., cm for height; see https://github.com/vojtechhuser/ThemisConcepts/blob/master/extras/results2019/S7-preferred_units-ABC.csv). UnitMorph builds upon that result.
 
 
 # Update history
