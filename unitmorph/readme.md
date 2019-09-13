@@ -8,7 +8,7 @@ ThemisConcepts OHDSI network study provided (presented at AMIA 2019 as poster) a
 # Update history
 
 ## Sep 12,2019
-Initial draft and test on mimic OMOP data.
+Initial draft and test on mimic OMOP data. Current SQL is not an `UPDATE` statement but a view of the data after join with the `CONV` table. It is a view that shows new values. The local ETL developer may easy turn the view into UPDATE statement (in the dialect of his/her DBMS).
 
 
 # Assumptions
