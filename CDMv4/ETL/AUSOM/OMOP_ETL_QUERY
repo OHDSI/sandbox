@@ -1,8 +1,9 @@
--- ###########################################################
+﻿-- ###########################################################
 -- ETL process for AUSOM into OMOP CDM v4.0 in MSSQL
 -- by Man Young Park, PhD, Ajou University School of Medicine
 -- The Korean will be rewritten in English later.
 -- ###########################################################
+testtest22222222222
 
 [2013_EMR_datamart]
 use SCAN
