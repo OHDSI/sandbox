@@ -1,0 +1,327 @@
+Sub format_White_rabbit()
+    WR_formatSheets
+    WR_format_field_overview
+    WR_table_link
+    WR_field_link
+    select_a2
+    
+    Worksheets("Table Overview").Activate
+    
+End Sub
+
+
+Private Sub WR_table_link()
+
+    Dim row As Integer
+    Dim NumRows As Integer
+    Dim tableRowNumber As Integer
+    Dim TARGET As String
+    Dim tableCell As Range
+
+    Application.ScreenUpdating = False
+    Worksheets("Table Overview").Activate
+    
+    Sheets("Table Overview").Select
+    Sheets("Table Overview").Move Before:=Sheets(1)
+
+    Worksheets("Table Overview").Activate
+    NumRows = get_last_row
+    For row = 2 To NumRows
+        Worksheets("Table Overview").Activate
+        Set tableCell = ActiveSheet.Range(Cells(row, 1), Cells(row, 1))
+        tableCell.Select
+        If tableCell.Value = vbNullString Then GoTo EndForLoop
+        
+        tableRowNumber = getFirstTableRow("Field Overview", tableCell.Value)
+        TARGET = "'Field Overview'!A" + CStr(tableRowNumber)
+        
+        ' table overview to field overview link
+        Worksheets("Table Overview").Activate
+        ActiveSheet.Range(Cells(row, 1), Cells(row, 1)).Select
+        ActiveCell.Hyperlinks.Delete
+        ActiveCell.Hyperlinks.Add Anchor:=Selection, Address:="", SubAddress:=TARGET
+        
+        
+        ' field overview to table link
+        Worksheets("Field Overview").Activate
+        ActiveSheet.Range(Cells(tableRowNumber, 1), Cells(tableRowNumber, 1)).Select
+        TARGET = "'Table Overview'!A" + CStr(row)
+        ActiveCell.Hyperlinks.Delete
+        ActiveCell.Hyperlinks.Add Anchor:=Selection, Address:="", SubAddress:=TARGET
+           
+    
+EndForLoop:
+    Next row
+    
+    Application.ScreenUpdating = True
+End Sub
+
+
+Private Sub WR_field_link()
+' Create hyperlinks for each table/Column to the sheet and column in
+' the detail sheet.  Also hyperlink back from the detail column to
+' the entry on the Field Overview sheet
+    
+    Dim row As Integer
+    Dim NumRows As Integer
+    Dim tableCell As Range
+    Dim columnCell As Range
+    Dim targetColumn As Integer
+    Dim TARGET As String
+    Dim detailCell As Range
+    
+    Worksheets("Field Overview").Activate
+    
+    Application.ScreenUpdating = False
+    
+    NumRows = get_last_row
+    
+      ' Establish "For" loop to loop "numrows" number of times.
+      For row = 2 To NumRows
+       Worksheets("Field Overview").Activate
+        Set tableCell = Worksheets("Field Overview").Range(Cells(row, 1), Cells(row, 1))
+        tableCell.Select
+        
+        If tableCell.Value = vbNullString Then GoTo EndForLoop
+       
+        Set columnCell = Worksheets("Field Overview").Range(Cells(row, 2), Cells(row, 2))
+        
+        targetColumn = getColumnNumber(tableCell.Value, columnCell.Value)
+        TARGET = tableCell.Value + "!" + Cells(1, targetColumn).Address
+        
+        columnCell.Activate
+        
+        columnCell.Hyperlinks.Delete
+        columnCell.Hyperlinks.Add Anchor:=Selection, Address:="", SubAddress:=TARGET
+        
+        
+        ' Now link the other direction
+        Worksheets(tableCell.Value).Activate
+        Range("A1").Select
+        
+        Set detailCell = Range(Cells(1, targetColumn), Cells(1, targetColumn))
+        TARGET = "'Field Overview'" + "!" + columnCell.Address
+        
+        detailCell.Activate
+        detailCell.Hyperlinks.Delete
+        detailCell.Hyperlinks.Add Anchor:=Selection, Address:="", SubAddress:=TARGET
+         
+EndForLoop:
+      Next row
+    Worksheets("Field Overview").Activate
+    
+    Application.ScreenUpdating = True
+End Sub
+
+
+Private Function getColumnNumber(ByVal workSheetName As String, ByVal headerText As String) As Integer
+' Get the column number for the headerText.  Assumes headers are in
+' row one and that the header exists
+' returns the column number
+
+Dim columnNumber As Integer
+Dim columns As Integer
+Dim headerCell As Range
+Dim currentActiveSheet As Worksheet
+    
+    getColumnNumber = 0
+    Set currentActiveSheet = ActiveSheet
+    Worksheets(workSheetName).Activate
+    With ActiveSheet
+      
+    columns = get_last_column
+    
+    For columnNumber = 1 To columns
+        Set headerCell = Range(Cells(1, columnNumber), Cells(1, columnNumber))
+        If headerCell.Value = headerText Then
+            currentActiveSheet.Activate
+            getColumnNumber = columnNumber
+            Exit Function
+        End If
+    Next
+   End With
+   currentActiveSheet.Activate
+End Function
+Private Function getFirstTableRow(ByVal workSheetName As String, ByVal TableName As String) As Integer
+' Get the first row number that matches the tableName
+    Dim rowNumber As Integer
+    Dim rows As Long
+    
+    getFirstTableRow = 0
+    Worksheets(workSheetName).Activate
+    rows = get_last_row
+   
+    For rowNumber = 2 To rows
+        If Range(Cells(rowNumber, 1), Cells(rowNumber, 1)).Value = TableName Then
+            getFirstTableRow = rowNumber
+            Exit Function
+        End If
+    Next
+End Function
+
+ Private Sub WR_formatSheets()
+  ' Freeze top row
+  ' Change Frequency to Freq
+  ' Bold headings
+  ' Auto fit columns
+
+         Dim WS_Count As Integer
+         Dim I As Integer
+         Dim sht As Worksheet
+         
+         Application.ScreenUpdating = False
+      
+         ' Set WS_Count equal to the number of worksheets in the active
+         ' workbook.
+         WS_Count = ActiveWorkbook.Worksheets.Count
+
+         ' Begin the loop.
+         For I = 1 To WS_Count
+            Set sht = ActiveWorkbook.Worksheets(I)
+            sht.Activate
+            
+            ' remove prior hyper links
+            Cells.Select
+            Selection.Hyperlinks.Delete
+            
+            ' Freeze top row
+            With ActiveWindow
+                .SplitColumn = 0
+                .SplitRow = 1
+            End With
+            rows("1:1").Select
+            ActiveWindow.FreezePanes = True
+            
+            ' Bold top row text
+            Range("A1", Range("A1").End(xlToRight)).Select
+            Selection.Font.Bold = True
+            
+            ' Replace Frequency with Freq
+            Cells.Replace What:="frequency", Replacement:="Freq", LookAt:=xlPart, _
+            SearchOrder:=xlByRows, MatchCase:=False, SearchFormat:=False, _
+            ReplaceFormat:=False, FormulaVersion:=xlReplaceFormula2
+            
+           ' select entire sheet and auto fit
+            Cells.Select
+            Cells.EntireColumn.AutoFit
+
+         Next I
+
+        Application.ScreenUpdating = True
+      End Sub
+
+Private Sub WR_format_field_overview()
+' Ask if user want to sort by table/column
+' Put a space before each new table
+' Filter on table
+
+    Dim answer As Integer
+    Dim rowCount As Integer
+    Dim currentRow As Integer
+    Dim priorTableName As String
+    
+    Worksheets("Field Overview").Activate
+
+    answer = MsgBox("Sort Field Overview by Table/Column?" _
+                  , vbQuestion + vbYesNoCancel + vbDefaultButton2, "White Rabbit Formater")
+    If answer = vbCancel Then
+        Exit Sub
+    End If
+    
+    Application.ScreenUpdating = False
+    
+    If answer = vbYes Then
+        Cells.Select
+        ActiveWorkbook.Worksheets("Field Overview").Sort.SortFields.Clear
+        ActiveWorkbook.Worksheets("Field Overview").Sort.SortFields.Add2 _
+        Key:=Range("A2:A754") _
+        , SortOn:=xlSortOnValues, Order:=xlAscending, DataOption:=xlSortNormal
+        
+        ActiveWorkbook.Worksheets("Field Overview").Sort.SortFields.Add2 _
+        Key:=Range("B2:B754") _
+        , SortOn:=xlSortOnValues, Order:=xlAscending, DataOption:=xlSortNormal
+        
+        With ActiveWorkbook.Worksheets("Field Overview").Sort
+            .SetRange Range("A1:J754")
+            .Header = xlYes
+            .MatchCase = False
+            .Orientation = xlTopToBottom
+            .SortMethod = xlPinYin
+            .Apply
+        End With
+    End If ' sort
+    
+    'Delete any blank rows at the top
+    rowCount = get_last_row
+    currentRow = 2
+    While Range(Cells(currentRow, 1), Cells(currentRow, 1)).Value = "" _
+      And currentRow < rowCount 'this second test just incase
+        If Range(Cells(currentRow, 1), Cells(currentRow, 1)).Value = "" Then
+            rows(currentRow).Delete
+            rowCount = rowCount - 1
+        Else
+            currentRow = currentRow + 1
+        End If
+    Wend
+    
+    'Insert a blank line above each new table definition
+    rowCount = get_last_row
+    currentRow = 2
+    priorTableName = Range(Cells(currentRow, 1), Cells(currentRow, 1)).Value
+    While currentRow < rowCount
+        If Not priorTableName = Range(Cells(currentRow, 1), Cells(currentRow, 1)).Value _
+            And Not Range(Cells(currentRow, 1), Cells(currentRow, 1)).Value = "" Then
+            
+            priorTableName = Range(Cells(currentRow, 1), Cells(currentRow, 1)).Value
+            If Not Range(Cells(currentRow - 1, 1), Cells(currentRow - 1, 1)).Value = "" Then
+                rows(currentRow).Insert
+                rowCount = rowCount + 1
+            End If ' already a blank line
+        End If 'table name changed
+        currentRow = currentRow + 1
+    Wend
+    
+    Application.ScreenUpdating = True
+    End Sub
+
+Private Sub select_a2()
+    Dim I As Integer
+    Dim sht As Worksheet
+         
+    Application.ScreenUpdating = False
+      
+    WS_Count = ActiveWorkbook.Worksheets.Count
+
+    For I = 1 To WS_Count
+        Set sht = ActiveWorkbook.Worksheets(I)
+        sht.Activate
+        sht.Range("A2").Select
+    Next I
+    Application.ScreenUpdating = True
+End Sub
+ Private Function get_last_row() As Long
+  'get the last row of current sheet
+    
+    get_last_row = Cells.Find(What:="*", _
+                    After:=Range("A1"), _
+                    LookAt:=xlPart, _
+                    LookIn:=xlValues, _
+                    SearchOrder:=xlByRows, _
+                    SearchDirection:=xlPrevious, _
+                    MatchCase:=False).row
+
+
+End Function
+
+ Private Function get_last_column() As Long
+  ' get last column of current sheet
+    
+    get_last_column = Cells.Find(What:="*", _
+                    After:=Range("A1"), _
+                    LookAt:=xlPart, _
+                    LookIn:=xlFormulas, _
+                    SearchOrder:=xlByColumns, _
+                    SearchDirection:=xlPrevious, _
+                    MatchCase:=False).Column
+
+End Function
