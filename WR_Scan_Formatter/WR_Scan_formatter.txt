@@ -199,7 +199,7 @@ End Function
             ' Replace Frequency with Freq
             Cells.Replace What:="frequency", Replacement:="Freq", LookAt:=xlPart, _
             SearchOrder:=xlByRows, MatchCase:=False, SearchFormat:=False, _
-            ReplaceFormat:=False, FormulaVersion:=xlReplaceFormula2
+            ReplaceFormat:=False
             
            ' select entire sheet and auto fit
             Cells.Select
@@ -219,6 +219,8 @@ Private Sub WR_format_field_overview()
     Dim rowCount As Integer
     Dim currentRow As Integer
     Dim priorTableName As String
+    Dim lastRow As Long
+    Dim lastColumn As Long
     
     Worksheets("Field Overview").Activate
 
@@ -231,24 +233,18 @@ Private Sub WR_format_field_overview()
     Application.ScreenUpdating = False
     
     If answer = vbYes Then
-        Cells.Select
-        ActiveWorkbook.Worksheets("Field Overview").Sort.SortFields.Clear
-        ActiveWorkbook.Worksheets("Field Overview").Sort.SortFields.Add2 _
-        Key:=Range("A2:A754") _
-        , SortOn:=xlSortOnValues, Order:=xlAscending, DataOption:=xlSortNormal
-        
-        ActiveWorkbook.Worksheets("Field Overview").Sort.SortFields.Add2 _
-        Key:=Range("B2:B754") _
-        , SortOn:=xlSortOnValues, Order:=xlAscending, DataOption:=xlSortNormal
-        
+	lastRow = get_last_row
+        lastColumn = get_last_column
+         ' sort by table/column
         With ActiveWorkbook.Worksheets("Field Overview").Sort
-            .SetRange Range("A1:J754")
+            .SortFields.Clear
+            .SortFields.Add Key:=Range("A1"), Order:=xlAscending
+            .SortFields.Add Key:=Range("B1"), Order:=xlAscending
+            .SetRange Range(Cells(1, 1), Cells(lastRow, lastColumn))
             .Header = xlYes
-            .MatchCase = False
-            .Orientation = xlTopToBottom
-            .SortMethod = xlPinYin
             .Apply
         End With
+    
     End If ' sort
     
     'Delete any blank rows at the top
