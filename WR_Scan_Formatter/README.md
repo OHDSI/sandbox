@@ -12,6 +12,9 @@ The White Rabbit Scan workbook has Excel worksheets labeled 'Table Overview' and
 ## Installation ##
 Get to Excel Developer application and paste code into ThisWorkBook.  Another option is to save as an add-in so that the code will be accessible to other scan report workbooks.
 
+## Example ##
+See example_ScanReport_sql.xlsx in this directory.
+
 ## Dis-claimer ##
 I wrote this for my benefit, but thought it might be useful to other that have White Rabbit scan reports with lots of tables and fields.  Feel free to make improvements and push them back into the OHDSI sandbox.
 
