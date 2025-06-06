@@ -20,6 +20,21 @@ See sql code for the where clause for some main assumptions.
 Note that we don’t have the `source_unit_concept_id` formally in the CDM - so we must use what is in unit_concept_id and override it.  (and rely that the source value unit will reflect the units prior being converted)
 See prefix new_ in the query
 
+# implementation
+compared with 2019 - no change to CDM is required
+
+## A
+no change to DQD, no change to vocabulary and unitmorg.csv and SQL is provided in seperate repo. Add to their ETL (or not) based on their choice.
+follows OMOP principle of full preservation of original data (both data is in CDM preserved)
+
+## B
++ DQD (kb for conversion is more integrated)
+
+## C
+prefered unit knowledge is relationship in vocabulary
+con: any update takes half a year
+pro: 
+
 
 # Links
 
